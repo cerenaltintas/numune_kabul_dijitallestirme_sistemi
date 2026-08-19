@@ -1,0 +1,94 @@
+@model IEnumerable<NumuneKabul.Web.Models.AuditLogViewModel>
+
+@if (Model != null && Model.Any())
+{
+    <div class="timeline-container px-1 pt-2 pb-3">
+        @foreach (var log in Model.OrderByDescending(x => x.Date))
+        {
+            var actionLower = (log.Action ?? "").ToLower();
+            var iconClass = "bi-info-circle";
+            var iconColor = "text-primary";
+            var bgColor = "bg-primary bg-opacity-10";
+
+            if (log.Severity == "Warning") { iconColor = "text-warning"; bgColor = "bg-warning bg-opacity-10"; iconClass = "bi-exclamation-triangle"; }
+            else if (log.Severity == "Error" || log.Severity == "Critical") { iconColor = "text-danger"; bgColor = "bg-danger bg-opacity-10"; iconClass = "bi-x-circle"; }
+            else if (actionLower.Contains("update") || actionLower.Contains("edit") || actionLower.Contains("manuel")) { iconColor = "text-info"; bgColor = "bg-info bg-opacity-10"; iconClass = "bi-pencil-square"; }
+            else if (actionLower.Contains("ocr") || actionLower.Contains("extract")) { iconColor = "text-success"; bgColor = "bg-success bg-opacity-10"; iconClass = "bi-cpu"; }
+            else if (actionLower.Contains("upload") || actionLower.Contains("create")) { iconColor = "text-secondary"; bgColor = "bg-secondary bg-opacity-10"; iconClass = "bi-cloud-upload"; }
+
+            <div class="audit-item d-flex mb-3 position-relative">
+                <!-- Timeline line -->
+                <div class="timeline-line position-absolute h-100 border-start border-2 border-light" style="left: 19px; top: 30px; z-index: 0;"></div>
+                
+                <!-- Icon -->
+                <div class="audit-icon-wrapper rounded-circle d-flex align-items-center justify-content-center @bgColor me-3 position-relative z-1" style="width: 40px; height: 40px; min-width: 40px; border: 3px solid white;">
+                    <i class="bi @iconClass @iconColor fs-5"></i>
+                </div>
+                
+                <!-- Content Card -->
+                <div class="audit-content flex-grow-1 bg-white border border-light rounded-3 p-3 shadow-sm transition-hover">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="mb-0 fw-bold text-dark" style="font-size: 0.9rem;">@log.Action</h6>
+                        <span class="badge bg-light text-secondary border border-light" style="font-size: 0.7rem;">@log.Date.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</span>
+                    </div>
+                    
+                    @if (!string.IsNullOrEmpty(log.Description))
+                    {
+                        <p class="text-secondary mb-2" style="font-size: 0.8rem; line-height: 1.4;">@log.Description</p>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(log.OldValues) || !string.IsNullOrEmpty(log.NewValues))
+                    {
+                        <div class="value-changes bg-light rounded-2 p-2 mb-2 d-flex flex-column gap-1 border border-light">
+                            @if (!string.IsNullOrEmpty(log.OldValues)) 
+                            { 
+                                <div class="d-flex align-items-center text-danger" style="font-size: 0.75rem;">
+                                    <i class="bi bi-x-lg me-2 opacity-75"></i> 
+                                    <span class="text-decoration-line-through">@log.OldValues</span>
+                                </div> 
+                            }
+                            @if (!string.IsNullOrEmpty(log.NewValues)) 
+                            { 
+                                <div class="d-flex align-items-center text-success" style="font-size: 0.75rem;">
+                                    <i class="bi bi-arrow-return-right me-2 opacity-75"></i> 
+                                    <span class="fw-medium">@log.NewValues</span>
+                                </div> 
+                            }
+                        </div>
+                    }
+
+                    <div class="d-flex align-items-center gap-3 mt-2 border-top pt-2">
+                        @if (log.UserId.HasValue)
+                        {
+                            <span class="text-muted d-flex align-items-center" style="font-size: 0.7rem;" title="İşlemi Yapan Kullanıcı">
+                                <i class="bi bi-person-fill me-1 opacity-75"></i> Kullanıcı ID: @log.UserId
+                            </span>
+                        }
+                        @if (!string.IsNullOrEmpty(log.IpAddress))
+                        {
+                            <span class="text-muted d-flex align-items-center" style="font-size: 0.7rem;" title="İşlem Yapılan IP Adresi">
+                                <i class="bi bi-geo-alt-fill me-1 opacity-75"></i> @log.IpAddress
+                            </span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+    
+    <style>
+        .audit-item:last-child .timeline-line { display: none; }
+        .transition-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .transition-hover:hover { transform: translateY(-2px); box-shadow: 0 .25rem .5rem rgba(0,0,0,.15)!important; }
+    </style>
+}
+else
+{
+    <div class="text-center py-5 px-3">
+        <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+            <i class="bi bi-clock-history text-secondary fs-3"></i>
+        </div>
+        <h6 class="text-dark fw-bold mb-1">Kayıt Bulunamadı</h6>
+        <p class="text-muted small mb-0">Bu belge üzerinde henüz kaydedilmiş bir sistem veya kullanıcı hareketi bulunmuyor.</p>
+    </div>
+}

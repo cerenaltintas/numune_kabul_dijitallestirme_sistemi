@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Dijital Numune Merkezi</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="~/css/site.css?v=@DateTime.Now.Ticks" />
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <a href="/" class="sidebar-brand">
+                <div class="bg-primary text-white rounded d-flex align-items-center justify-content-center shadow" style="width: 32px; height: 32px; font-size: 1.2rem;">
+                    <i class="bi bi-layers-fill"></i>
+                </div>
+                Dijital Numune
+            </a>
+            
+            @{
+                var userName = Context.Session.GetString("UserName") ?? "Kullanıcı";
+                var userRole = Context.Session.GetString("UserRole") ?? "";
+                var isAdmin = userRole == "Admin";
+            }
+            <div class="sidebar-nav mt-4">
+                <a asp-controller="Document" asp-action="Index" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Document" && ViewContext.RouteData.Values["Action"]?.ToString() == "Index" ? "active" : "")">
+                    <i class="bi bi-grid-1x2"></i> Numune Belgeleri
+                </a>
+                <a asp-controller="Document" asp-action="Upload" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Document" && ViewContext.RouteData.Values["Action"]?.ToString() == "Upload" ? "active" : "")">
+                    <i class="bi bi-cloud-arrow-up"></i> Yeni Yükle
+                </a>
+
+                @if (isAdmin)
+                {
+                    <div class="nav-section-title mt-4 mb-2 ms-4 text-muted" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Yönetim Paneli</div>
+                    
+                    <a asp-controller="Institution" asp-action="Index" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Institution" ? "active" : "")">
+                        <i class="bi bi-building"></i> Kurum Yönetimi
+                    </a>
+                    <a asp-controller="Template" asp-action="Index" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Template" ? "active" : "")">
+                        <i class="bi bi-file-earmark-ruled"></i> Şablon Yönetimi
+                    </a>
+                    <a asp-controller="User" asp-action="Index" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "User" ? "active" : "")">
+                        <i class="bi bi-people"></i> Kullanıcı Yönetimi
+                    </a>
+                    <a asp-controller="Settings" asp-action="Index" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Settings" ? "active" : "")">
+                        <i class="bi bi-gear"></i> Sistem Ayarları
+                    </a>
+                }
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="user-card">
+                    <div class="user-info-wrapper">
+                        <div class="user-avatar">
+                            @{
+                                var initials = "AD"; // Varsayılan
+                                if (!string.IsNullOrWhiteSpace(userName))
+                                {
+                                    var parts = userName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                                    initials = parts.Length > 1 
+                                        ? $"{parts[0][0]}{parts[1][0]}".ToUpper() 
+                                        : $"{parts[0][0]}".ToUpper();
+                                }
+                            }
+                            <span>@initials</span>
+                        </div>
+                        <div class="user-details">
+                            <span class="user-name" title="@userName">@userName</span>
+                            <span class="user-role">@userRole</span>
+                        </div>
+                    </div>
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="m-0 p-0">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn-logout" title="Çıkış Yap">
+                            <i class="bi bi-box-arrow-right fs-5"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            @RenderBody()
+        </main>
+    </div>
+
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

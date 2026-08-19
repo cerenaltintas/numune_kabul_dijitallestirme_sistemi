@@ -1,0 +1,111 @@
+@model List<NumuneKabul.Application.DTOs.UserDto>
+@{
+    ViewData["Title"] = "Kullanýcý Yönetimi";
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="h3 mb-1 text-dark" style="font-weight: 700;">Kullanýcý Yönetimi</h2>
+        <p class="text-muted mb-0">Sisteme kayýtlý kullanýcýlarý ve rollerini yönetin.</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary">
+        <i class="bi bi-person-plus me-2"></i> Yeni Kullanýcý Ekle
+    </a>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="px-4 py-3 text-muted" style="font-weight: 600; font-size: 0.85rem;">AD SOYAD</th>
+                        <th class="px-4 py-3 text-muted" style="font-weight: 600; font-size: 0.85rem;">KULLANICI ADI</th>
+                        <th class="px-4 py-3 text-muted" style="font-weight: 600; font-size: 0.85rem;">ROLÜ</th>
+                        <th class="px-4 py-3 text-muted" style="font-weight: 600; font-size: 0.85rem;">KURUM</th>
+                        <th class="px-4 py-3 text-muted" style="font-weight: 600; font-size: 0.85rem;">DURUM</th>
+                        <th class="px-4 py-3 text-muted text-end" style="font-weight: 600; font-size: 0.85rem;">ÝÞLEMLER</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="px-4 py-3 fw-medium text-dark">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                            <i class="bi bi-person fs-5"></i>
+                                        </div>
+                                        @item.Name
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-secondary">@item.Username</td>
+                                <td class="px-4 py-3">
+                                    @if (item.Role == "Admin")
+                                    {
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-3 py-2 rounded-pill">Admin</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-2 rounded-pill">@item.Role</span>
+                                    }
+                                </td>
+                                <td class="px-4 py-3 text-secondary">
+                                    @(string.IsNullOrEmpty(item.InstitutionName) ? "-" : item.InstitutionName)
+                                </td>
+                                <td class="px-4 py-3">
+                                    @if (item.IsActive)
+                                    {
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill"><i class="bi bi-check-circle me-1"></i> Aktif</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-3 py-2 rounded-pill"><i class="bi bi-x-circle me-1"></i> Pasif</span>
+                                    }
+                                </td>
+                                <td class="px-4 py-3 text-end">
+                                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-2">
+                                        <i class="bi bi-pencil me-1"></i> Düzenle
+                                    </a>
+                                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Bu kullanýcýyý silmek istediðinize emin misiniz?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">
+                                            <i class="bi bi-trash me-1"></i> Sil
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-people-fill fs-1 d-block mb-3 text-black-50"></i>
+                                Kayýtlý hiçbir kullanýcý bulunamadý.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+

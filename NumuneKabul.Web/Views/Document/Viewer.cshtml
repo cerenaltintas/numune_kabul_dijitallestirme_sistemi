@@ -1,0 +1,1277 @@
+@model NumuneKabul.Web.Models.PdfDocumentViewModel
+@{
+    ViewData["Title"] = "Belge Görüntüleyici";
+}
+
+<style>
+    .main-content {
+        padding: 1.5rem !important;
+        padding-bottom: 1rem !important;
+    }
+</style>
+
+<div class="container-fluid p-0 d-flex flex-column" style="height: calc(100vh - 2.5rem);">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">
+        <div>
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary rounded-pill px-3 me-3">
+                <i class="bi bi-arrow-left me-1"></i> Listeye Dön
+            </a>
+            <span class="fw-bold fs-5 text-dark">@Model.FileName</span>
+            <span class="badge bg-secondary ms-2">@Model.InstitutionName</span>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="d-flex flex-column flex-lg-row flex-grow-1 overflow-hidden">
+        <!-- PDF Görüntüleyici (Sol Panel) -->
+        <div id="leftPanel" class="d-flex flex-column mb-3 mb-lg-0" style="width: 65%;">
+            @if (Model.Status == "OcrCompleted" || Model.Status == "NeedsManualReview" || Model.Status == "Corrected")
+            {
+                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                    <div class="btn-group btn-group-sm shadow-sm" role="group">
+                        <input type="radio" class="btn-check" name="viewMode" id="btnPdfMode" autocomplete="off" checked onchange="toggleViewMode('pdf')">
+                        <label class="btn btn-outline-primary fw-bold" for="btnPdfMode"><i class="bi bi-file-pdf me-1"></i> PDF Görünümü</label>
+
+                        <input type="radio" class="btn-check" name="viewMode" id="btnOcrMode" autocomplete="off" onchange="toggleViewMode('ocr')">
+                        <label class="btn btn-outline-primary fw-bold" for="btnOcrMode"><i class="bi bi-bounding-box-circles me-1"></i> İşaretli Alanlar</label>
+                    </div>
+                </div>
+            }
+            <div class="card border-0 rounded-4 flex-grow-1 overflow-hidden shadow-sm" style="background: var(--card-bg); position: relative;">
+                <div id="pdfContainer" class="card-body p-0 d-flex flex-column h-100" style="min-height: 0;">
+                    <!-- API'den view ucunu kullanarak PDF'i veya İşaretli Resmi MVC Controller üzerinden (Proxy) gömüyoruz -->
+                        <iframe src="/Document/StreamPdf/@Model.Id#view=Fit" class="flex-grow-1 w-100 h-100" style="border: none; background-color: #e5e7eb; min-height: 0;">
+                            Tarayıcınız PDF göstermeyi desteklemiyor.
+                        </iframe>
+                </div>
+                <div id="ocrContainer" class="card-body p-0 d-none h-100" style="min-height: 0; background-color: #525659; display: flex; flex-direction: column;">
+                    <!-- Dark PDF-like Toolbar -->
+                    <div class="d-flex align-items-center justify-content-between px-3 py-1 text-white" style="background-color: #323639; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10;">
+                        <!-- Left side: Title/Menu -->
+                        <div class="d-flex align-items-center gap-3">
+                            <button class="btn btn-sm btn-link text-white p-1" style="opacity: 0.8;" title="Menü" onclick="toggleSidebar()"><i class="bi bi-list fs-5"></i></button>
+                            <span class="text-truncate fw-medium" style="max-width: 150px; font-size: 0.85rem;" title="@Model.FileName">@Model.FileName</span>
+                        </div>
+                        
+                        <!-- Middle: Pagination and Zoom -->
+                        <div class="d-flex align-items-center gap-3">
+                            <!-- Pagination -->
+                            <div class="d-flex align-items-center gap-1">
+                                <button class="btn btn-sm btn-link text-white p-1" onclick="changePage(-1)" title="Önceki Sayfa" style="opacity: 0.8;"><i class="bi bi-chevron-up"></i></button>
+                                <span class="small fw-medium" style="background-color: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;">
+                                    <span id="currentPageSpan">@(ViewBag.CurrentPage ?? 1)</span> / @(Model.PageCount > 0 ? Model.PageCount : 1)
+                                </span>
+                                <button class="btn btn-sm btn-link text-white p-1" onclick="changePage(1)" title="Sonraki Sayfa" style="opacity: 0.8;"><i class="bi bi-chevron-down"></i></button>
+                            </div>
+                            
+                            <div style="width: 1px; height: 16px; background-color: rgba(255,255,255,0.2);"></div>
+
+                            <!-- Zoom -->
+                            <div class="d-flex align-items-center gap-1">
+                                <button class="btn btn-sm btn-link text-white p-1" onclick="zoomOut()" title="Küçült" style="opacity: 0.8;"><i class="bi bi-dash-lg"></i></button>
+                                <div style="background-color: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px; min-width: 50px; text-align: center; cursor: pointer;" onclick="resetZoom()" title="Ekrana Sığdır">
+                                    <span class="small fw-medium" id="zoomLevelSpan">100%</span>
+                                </div>
+                                <button class="btn btn-sm btn-link text-white p-1" onclick="zoomIn()" title="Büyüt" style="opacity: 0.8;"><i class="bi bi-plus-lg"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- Right side: Aesthetics -->
+                        <div class="d-flex align-items-center gap-1">
+                            <button class="btn btn-sm btn-link text-white p-1" style="opacity: 0.8;" title="Döndür" onclick="rotateImage()"><i class="bi bi-arrow-clockwise"></i></button>
+                            <div style="width: 1px; height: 16px; background-color: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+                            <button class="btn btn-sm btn-link text-white p-1" style="opacity: 0.8;" title="İndir" onclick="downloadPdf()"><i class="bi bi-download"></i></button>
+                            <button class="btn btn-sm btn-link text-white p-1" style="opacity: 0.8;" title="Yazdır" onclick="printDocument()"><i class="bi bi-printer"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-grow-1 overflow-hidden" style="min-height: 0;">
+                        <!-- Thumbnail Sidebar -->
+                        <div id="thumbnailSidebar" class="d-none flex-column align-items-center py-3 px-2" style="width: 220px; background-color: #323639; overflow-y: auto; border-right: 1px solid #1e1e1e; flex-shrink: 0;">
+                            @for(int i = 1; i <= (Model.PageCount > 0 ? Model.PageCount : 1); i++)
+                            {
+                                <div class="thumbnail-item text-center mb-4" style="cursor: pointer;" onclick="changePageTo(@i)">
+                                    <img src="/Document/CleanPageImage/@Model.Id?page=@i" class="img-fluid bg-white mb-2" style="max-width: 160px; width: 100%; transition: all 0.2s; border: 4px solid transparent;" id="thumb_@i" />
+                                    <div class="text-white small">@i</div>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- OCR Image Scroll Area -->
+                        <div id="ocrScrollArea" style="overflow: auto; flex-grow: 1; padding: 20px; background-color: #525659;">
+                            <div style="display: table; width: 100%; height: 100%;">
+                                <div style="display: table-cell; vertical-align: middle; text-align: center;">
+                                    <div id="imageWrapper" style="position: relative; display: inline-block; text-align: left; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
+                                        <img id="pageImage" src="" alt="Sayfa Resmi" class="bg-white" style="display: block;" onload="drawHighlights()" />
+                                        <div id="highlightsLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mouse ile Sürükleme Çubuğu (Resizer) -->
+        <div id="dragResizer" class="resizer d-none d-lg-flex mx-2 rounded"></div>
+
+        <!-- OCR Veri Doğrulama Paneli (Sağ Panel - Hazırlık) -->
+        <div id="rightPanel" class="d-flex flex-column" style="width: 35%;">
+            <div class="card border-0 shadow-lg rounded-4 flex-grow-1 h-100 overflow-auto" style="background: var(--card-bg);">
+                <div class="card-header bg-transparent border-bottom pt-4 pb-3 px-4 flex-shrink-0 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="fw-bold text-primary mb-0 d-flex align-items-center">
+                            <i class="bi bi-layout-text-sidebar-reverse me-2 fs-4"></i> Veri Çıkarımı
+                        </h5>
+                        <p class="small text-muted mb-0 mt-1">Sistem tarafından otomatik algılanan alanlar</p>
+                    </div>
+                </div>
+                <div class="card-body px-3 py-3">
+                    
+                    @if (Model.Status == "OcrCompleted" || Model.Status == "NeedsManualReview" || Model.Status == "Corrected")
+                    {
+                        var fields = ViewBag.ExtractedFields as List<NumuneKabul.Web.Models.ExtractedFieldViewModel>;
+
+                        if (Model.Status == "NeedsManualReview")
+                        {
+                            <div class="alert bg-warning bg-opacity-10 text-warning border-0 rounded-3 d-flex align-items-center justify-content-between py-2 px-3 mb-3 flex-shrink-0">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                                    <span class="fw-bold mb-0 small">İnceleme Gerekiyor</span>
+                                </div>
+                                @if(Model.ConfidenceScore.HasValue) { <small class="fw-bold">Skor: %@Model.ConfidenceScore.Value.ToString("0.##")</small> }
+                            </div>
+                        }
+                        else if (Model.Status == "Corrected")
+                        {
+                            <div class="alert bg-info bg-opacity-10 text-info border-0 rounded-3 d-flex align-items-center justify-content-between py-2 px-3 mb-3 flex-shrink-0">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-info-circle-fill fs-5"></i>
+                                    <span class="fw-bold mb-0 small">Manuel Düzeltildi</span>
+                                </div>
+                                @if(Model.ConfidenceScore.HasValue) { <small class="fw-bold">İlk Skor: %@Model.ConfidenceScore.Value.ToString("0.##")</small> }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert bg-success bg-opacity-10 text-success border-0 rounded-3 d-flex align-items-center justify-content-between py-2 px-3 mb-3 flex-shrink-0">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-check-circle-fill fs-5"></i>
+                                    <span class="fw-bold mb-0 small">OCR İşlemi Tamamlandı</span>
+                                </div>
+                                @if(Model.ConfidenceScore.HasValue) { <small class="fw-bold">Skor: %@Model.ConfidenceScore.Value.ToString("0.##")</small> }
+                            </div>
+                        }
+
+                        <!-- Sekmeler (Tabs) -->
+                        <ul class="nav nav-tabs nav-fill mb-3 flex-nowrap" id="rightPanelTabs" role="tablist" style="font-size: 0.85rem; white-space: nowrap;">
+                          <li class="nav-item" role="presentation">
+                            <button class="nav-link active fw-bold text-dark px-2" id="fields-tab" data-bs-toggle="tab" data-bs-target="#fields-tab-pane" type="button" role="tab">Çıkarılan Veriler</button>
+                          </li>
+                          <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-bold text-dark px-2" id="ocr-tab" data-bs-toggle="tab" data-bs-target="#ocr-tab-pane" type="button" role="tab">OCR Sonucu</button>
+                          </li>
+                          <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-bold text-dark px-2" id="audit-tab" data-bs-toggle="tab" data-bs-target="#audit-tab-pane" type="button" role="tab" onclick="loadAuditLogs(@Model.Id)">İşlem Geçmişi</button>
+                          </li>
+                        </ul>
+                        
+                        <div class="tab-content" id="myTabContent">
+                          <!-- Veriler Sekmesi -->
+                          <div class="tab-pane fade show active" id="fields-tab-pane" role="tabpanel" tabindex="0">
+                            @if (fields != null && fields.Any())
+                            {
+                                int current = ViewBag.CurrentPage ?? 1;
+                                // Geriye dönük verilerde PageNo = 0 olabilir, bu yüzden 1. sayfada PageNo 0 olanları da gösterelim.
+                                var pageFields = fields.Where(f => f.PageNo == current || (current == 1 && f.PageNo == 0)).ToList();
+
+                                if (pageFields.Any())
+                                {
+                                    foreach (var field in pageFields)
+                                    {
+                                        <form asp-action="UpdateField" method="post" class="mb-2 p-2 border-bottom ajax-update-form">
+                                            <input type="hidden" name="pdfId" value="@Model.Id" />
+                                            <input type="hidden" name="fieldId" value="@field.Id" />
+                                            
+                                            <label class="form-label small fw-bold text-dark d-flex justify-content-between mb-1">
+                                                @field.FieldName
+                                                @if (field.Status == "Corrected")
+                                                {
+                                                    <span class="badge bg-info"><i class="bi bi-pencil"></i> Düzeltildi</span>
+                                                }
+                                            </label>
+                                            
+                                            <div class="input-group input-group-sm align-items-stretch">
+                                                <textarea name="correctedValue" class="form-control auto-resize-textarea bg-white border-1 @(field.Severity == "Danger" ? "border-danger border-2" : (field.Severity == "Warning" ? "border-warning" : "border-secondary"))" rows="1" style="resize: vertical; min-height: 38px; overflow-y: hidden;">@field.RawValue</textarea>
+                                                <button class="btn btn-outline-primary d-flex align-items-center" type="submit">Kaydet</button>
+                                            </div>
+                                            
+                                            @if (field.Severity == "Danger")
+                                            {
+                                                <small class="text-danger fw-medium mt-1 d-block" style="font-size: 0.75rem;"><i class="bi bi-exclamation-octagon-fill me-1"></i> Okunamadı / Boş Değer</small>
+                                            }
+                                            else if (field.Severity == "Warning")
+                                            {
+                                                <small class="text-warning fw-medium mt-1 d-block" style="font-size: 0.75rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i> Düşük Doğruluk: %@(field.Confidence * 100)</small>
+                                            }
+                                        </form>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="text-center py-4">
+                                        <i class="bi bi-file-earmark-break text-muted fs-1 mb-2 d-block"></i>
+                                        <p class="text-muted small mb-0">Bu sayfada şablon ile eşleşen çıkarılmış veri bulunmuyor.</p>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="card shadow-sm border-0 rounded-3 mb-2 mt-1 overflow-hidden">
+                                    <div class="card-header bg-success bg-opacity-10 text-success border-0 py-2 d-flex align-items-center">
+                                        <i class="bi bi-magic me-2"></i>
+                                        <span class="mb-0 fw-bold small">Veri Çıkar (Şablon Uygula)</span>
+                                    </div>
+                                    <div class="card-body bg-light bg-opacity-50 p-3">
+                                        <form asp-action="ApplyTemplate" method="post">
+                                            <input type="hidden" name="pdfId" value="@Model.Id" />
+                                            
+                                            <div class="mb-2">
+                                                <label class="form-label fw-bold text-secondary mb-1 small">Kurum Seçimi</label>
+                                                <select id="institutionSelect" name="institutionId" class="form-select form-select-sm shadow-sm" required>
+                                                    <option value="">Kurum Seçiniz...</option>
+                                                    @if (ViewBag.Institutions != null)
+                                                    {
+                                                        foreach (var inst in ViewBag.Institutions)
+                                                        {
+                                                            <option value="@inst.Id">@inst.Name</option>
+                                                        }
+                                                    }
+                                                </select>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold text-secondary mb-1 small">Şablon Seçimi</label>
+                                                <select id="templateSelect" name="templateId" class="form-select form-select-sm shadow-sm" required disabled>
+                                                    <option value="">Önce Kurum Seçin...</option>
+                                                </select>
+                                            </div>
+
+                                            <button type="submit" class="btn btn-success btn-sm py-2 w-100 rounded-pill fw-bold shadow-sm mt-1">
+                                                <i class="bi bi-play-circle me-1"></i> Şablonu Uygula
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            }
+                          </div>
+                          
+                          <!-- OCR Sonucu Sekmesi -->
+                          <div class="tab-pane fade" id="ocr-tab-pane" role="tabpanel" tabindex="0">
+                            @if (!string.IsNullOrEmpty(ViewBag.OcrText as string))
+                            {
+                                <div class="bg-light p-3 border rounded-3" style="flex: 1 1 0%; min-height: 0; overflow-y: auto;">
+                                    <pre class="m-0 text-dark" style="white-space: pre-wrap; word-break: break-word; font-size: 13px; font-family: 'Courier New', Courier, monospace;">@ViewBag.OcrText</pre>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-5">
+                                    <i class="bi bi-file-text text-muted fs-1 mb-3 d-block"></i>
+                                    <p class="text-muted small mb-0">OCR sonucu bulunmuyor.</p>
+                                </div>
+                            }
+                          </div>
+                          
+                          <!-- Audit Log Sekmesi -->
+                          <div class="tab-pane fade" id="audit-tab-pane" role="tabpanel" tabindex="0">
+                            <div id="auditLogContainer" class="text-center p-3">
+                                <div class="spinner-border text-primary spinner-border-sm" role="status">
+                                  <span class="visually-hidden">Yükleniyor...</span>
+                                </div>
+                            </div>
+                          </div>
+                        </div>
+                    }
+
+                </div>
+                <div class="card-footer bg-transparent border-top pb-4 pt-3 px-4">
+                    @if (Model.Status == "OcrCompleted" || Model.Status == "NeedsManualReview" || Model.Status == "Corrected"
+                         || Model.Status == "XmlCreated" || Model.Status == "IntegrationSent" || Model.Status == "IntegrationFailed")
+                    {
+                        <div class="d-flex">
+                            <form asp-action="RetryOcr" asp-route-id="@Model.Id" method="post" class="w-100">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-success w-100 rounded-pill fw-bold shadow-sm py-2">
+                                    <i class="bi bi-arrow-clockwise me-1"></i> Tekrar OCR İşlemi Yap
+                                </button>
+                            </form>
+                        </div>
+
+                        @* ─── XML ve Entegrasyon İş Akışı Paneli ─────────────────── *@
+                        <hr class="my-3" />
+                        <p class="text-muted small fw-semibold mb-2 text-uppercase" style="letter-spacing:.06em;">
+                            <i class="bi bi-send me-1"></i> LIS/HBYS Entegrasyonu
+                        </p>
+
+                        <div class="d-grid gap-2">
+                            @* XML Oluştur *@
+                            <form asp-action="CreateXml" asp-route-id="@Model.Id" method="post">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-primary w-100 rounded-pill fw-bold py-2">
+                                    <i class="bi bi-file-code me-1"></i> XML Oluştur &amp; Arşivle
+                                </button>
+                            </form>
+
+                            @* XML İndir *@
+                            <a href="/Document/DownloadXml/@Model.Id" class="btn btn-outline-secondary w-100 rounded-pill fw-bold py-2">
+                                <i class="bi bi-download me-1"></i> XML İndir
+                            </a>
+
+                            @* LIS/HBYS'e Gönder *@
+                            <form asp-action="SendToIntegration" asp-route-id="@Model.Id" method="post">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold py-2">
+                                    <i class="bi bi-broadcast me-1"></i> LIS/HBYS'e Gönder
+                                </button>
+                            </form>
+
+                            @* Entegrasyon Durumu *@
+                            @if (Model.Status == "IntegrationSent")
+                            {
+                                <div class="alert alert-success rounded-3 py-2 px-3 mb-0 d-flex align-items-center gap-2">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span class="small fw-bold">Başarıyla Gönderildi</span>
+                                </div>
+                            }
+                            else if (Model.Status == "IntegrationFailed")
+                            {
+                                <div class="alert alert-danger rounded-3 py-2 px-3 mb-0 d-flex align-items-center justify-content-between">
+                                    <span class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-x-circle-fill"></i>
+                                        <span class="small fw-bold">Gönderim Başarısız</span>
+                                    </span>
+                                    <form asp-action="RetryIntegration" asp-route-id="@Model.Id" method="post" class="mb-0">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-light fw-bold rounded-pill">
+                                            <i class="bi bi-arrow-repeat me-1"></i>Yeniden Dene
+                                        </button>
+                                    </form>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <form asp-action="RetryOcr" asp-route-id="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-success w-100 rounded-pill fw-bold shadow-sm py-2">
+                                <i class="bi bi-magic me-2"></i> OCR İşlemini Başlat
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #myTabContent {
+        display: flex;
+        flex-direction: column;
+    }
+    #myTabContent > .tab-pane.active {
+        display: flex !important;
+        flex-direction: column;
+        flex: 1 1 0%;
+        min-height: 0;
+    }
+
+    .resizer {
+        width: 12px;
+        cursor: col-resize;
+        background-color: #f8f9fa;
+        border-left: 1px solid #dee2e6;
+        border-right: 1px solid #dee2e6;
+        transition: background-color 0.2s;
+        z-index: 10;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .resizer::after {
+        content: "⋮"; /* Tutamaç simgesi */
+        color: #adb5bd;
+        font-size: 24px;
+        font-weight: bold;
+    }
+    .resizer:hover, .resizer.resizing {
+        background-color: rgba(13, 110, 253, 0.2); /* Bootstrap primary açık */
+    }
+    .resizer:hover::after, .resizer.resizing::after {
+        color: #0d6efd;
+    }
+
+    /* Floating Inline Editor */
+    .inline-editor-card {
+        position: absolute;
+        z-index: 1060;
+        width: 280px;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,0.1);
+        border-radius: 0.75rem;
+        box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.2);
+        padding: 12px;
+        display: none; /* hidden by default */
+        flex-direction: column;
+        gap: 8px;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    .inline-editor-card.show {
+        display: flex;
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .inline-editor-header {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #212529;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #f1f3f5;
+        padding-bottom: 6px;
+    }
+    .inline-editor-body textarea {
+        width: 100%;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+        resize: vertical;
+        min-height: 40px;
+        outline: none;
+    }
+    .inline-editor-body textarea:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .inline-editor-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        margin-top: 4px;
+    }
+    
+    /* PDF Toolbar Hover Effects */
+    .btn-link.text-white:hover {
+        background-color: rgba(255,255,255,0.1);
+        opacity: 1 !important;
+        border-radius: 4px;
+    }
+</style>
+
+<!-- Defensive Programming: Veri ifşasını ve XSS ataklarını önlemek için JSON verisi güvenli bir script bloğuna alındı -->
+<script id="extractedFieldsData" type="application/json">
+    @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.ExtractedFields ?? new List<NumuneKabul.Web.Models.ExtractedFieldViewModel>()))
+</script>
+
+<script>
+    // ---------------------------------------------------------
+    // Clean Code & SRP: Tüm görünüm mantığı bir sınıf içerisine kapsüllendi (Encapsulation)
+    // ---------------------------------------------------------
+    class DocumentViewerApp {
+        constructor(pdfId, initialPage) {
+            this.pdfId = pdfId;
+            this.currentPage = initialPage;
+            this.zoomLevel = 1.0;
+            this.rotation = 0;
+            this.extractedFields = this.loadFieldsData();
+            
+            this.initElements();
+            this.bindEvents();
+            this.initAutoResize();
+            this.updateThumbnailSelection();
+        }
+
+        loadFieldsData() {
+            try {
+                const dataElement = document.getElementById('extractedFieldsData');
+                return dataElement ? JSON.parse(dataElement.textContent) : [];
+            } catch (error) {
+                console.error("OCR verileri yüklenirken hata oluştu.", error);
+                return [];
+            }
+        }
+
+        initElements() {
+            this.leftPanel = document.getElementById('leftPanel');
+            this.rightPanel = document.getElementById('rightPanel');
+            this.resizer = document.getElementById('dragResizer');
+            this.pdfContainer = document.getElementById('pdfContainer');
+            this.ocrContainer = document.getElementById('ocrContainer');
+            this.ocrScrollArea = document.getElementById('ocrScrollArea');
+            this.zoomLevelSpan = document.getElementById('zoomLevelSpan');
+            this.paginationControls = document.getElementById('paginationControls');
+            this.pageImage = document.getElementById('pageImage');
+            this.highlightsLayer = document.getElementById('highlightsLayer');
+            this.currentPageSpan = document.getElementById('currentPageSpan');
+            this.isResizing = false;
+            
+            this.createInlineEditorElement();
+
+            window.addEventListener('resize', this.handleResize);
+        }
+
+        bindEvents() {
+            // Resizer (Sürükleme) Olayları
+            if (this.resizer) {
+                this.resizer.addEventListener('mousedown', (e) => this.startResizing(e));
+                document.addEventListener('mousemove', (e) => this.handleResizing(e));
+                document.addEventListener('mouseup', () => this.stopResizing());
+                
+                window.addEventListener('resize', () => {
+                    if (window.innerWidth < 992) {
+                        this.leftPanel.style.width = '100%';
+                        this.rightPanel.style.width = '100%';
+                    } else if (this.leftPanel.style.width === '100%') {
+                        this.leftPanel.style.width = '65%';
+                        this.rightPanel.style.width = '35%';
+                    }
+                });
+            }
+
+            // Sayfa Yeniden Boyutlandırma (Debounced) - Performans için
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    if (this.ocrContainer && !this.ocrContainer.classList.contains('d-none')) {
+                        this.drawHighlights();
+                    }
+                }, 100); // 100ms debounce
+            });
+
+            // Resim yüklendiğinde işaretleri çiz
+            if (this.pageImage) {
+                this.pageImage.addEventListener('onload', () => this.drawHighlights());
+            }
+
+            // Sekme değişimlerinde textarea boyutlarını güncelle
+            const rightPanelTabs = document.getElementById('rightPanelTabs');
+            if (rightPanelTabs) {
+                rightPanelTabs.addEventListener('shown.bs.tab', (event) => {
+                    if (event.target.id === 'fields-tab') {
+                        this.initAutoResize();
+                    }
+                });
+            } // ADDED MISSING BRACE
+            
+            // Form submission interceptor (AJAX)
+            const ajaxForms = document.querySelectorAll('.ajax-update-form');
+            ajaxForms.forEach(form => {
+                form.addEventListener('submit', (e) => this.handleAjaxSubmit(e, form));
+            });
+        }
+
+        async handleAjaxSubmit(e, form) {
+            e.preventDefault();
+            
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalBtnHtml = submitBtn.innerHTML;
+            const textInput = form.querySelector('textarea[name="correctedValue"]');
+            const fieldId = parseInt(form.querySelector('input[name="fieldId"]').value);
+            
+            try {
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+                submitBtn.disabled = true;
+
+                const formData = new FormData(form);
+                const actionUrl = form.getAttribute('action');
+
+                const response = await fetch(actionUrl, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                if (!response.ok) throw new Error('Network response was not ok');
+                const result = await response.json();
+
+                if (result.success) {
+                    // Update UI (Success visual)
+                    textInput.classList.remove('border-warning', 'border-danger', 'border-2');
+                    textInput.classList.add('border-success');
+                    
+                    const label = form.querySelector('label');
+                    if (!label.innerHTML.includes('Düzeltildi')) {
+                         label.innerHTML += ' <span class="badge bg-info"><i class="bi bi-pencil"></i> Düzeltildi</span>';
+                    }
+
+                    // Remove small warning/danger texts if any
+                    const alerts = form.querySelectorAll('small.text-danger, small.text-warning');
+                    alerts.forEach(a => a.remove());
+                    
+                    // Show success visual feedback
+                    this.showToast('Başarılı', result.message, 'success');
+                    
+                    // Update the local extractedFields array so the highlight color turns green!
+                    const field = this.extractedFields.find(f => (f.Id || f.id) === fieldId);
+                    if (field) {
+                        field.Status = 'Corrected';
+                        field.Severity = 'Success';
+                        field.RawValue = formData.get('correctedValue');
+                        if (this.ocrContainer && !this.ocrContainer.classList.contains('d-none')) {
+                            this.drawHighlights(); 
+                        }
+                    }
+                } else {
+                    this.showToast('Hata', result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('AJAX Error:', error);
+                this.showToast('Hata', 'Sunucu ile iletişim kurulamadı.', 'danger');
+            } finally {
+                submitBtn.innerHTML = originalBtnHtml;
+                submitBtn.disabled = false;
+            }
+        }
+        
+        showToast(title, message, type) {
+            // Basit bir Bootstrap Toast elementi oluştur ve body'ye ekle
+            const toastContainer = document.getElementById('toast-container') || this.createToastContainer();
+            
+            const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+            const icon = type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle';
+            
+            const toastHtml = `
+                <div class="toast align-items-center text-white ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                  <div class="d-flex">
+                    <div class="toast-body d-flex align-items-center">
+                      <i class="bi ${icon} fs-5 me-2"></i>
+                      <div>
+                        <strong>${title}</strong><br/>
+                        <span class="small">${message}</span>
+                      </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                  </div>
+                </div>
+            `;
+            
+            const toastElement = document.createElement('div');
+            toastElement.innerHTML = toastHtml.trim();
+            const toastNode = toastElement.firstChild;
+            toastContainer.appendChild(toastNode);
+            
+            const bsToast = new bootstrap.Toast(toastNode, { autohide: true, delay: 3000 });
+            bsToast.show();
+            
+            toastNode.addEventListener('hidden.bs.toast', () => {
+                toastNode.remove();
+            });
+        }
+        
+        createToastContainer() {
+            const container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            container.style.zIndex = '1055';
+            document.body.appendChild(container);
+            return container;
+        }
+
+        // --- Panel Boyutlandırma ---
+        startResizing(e) {
+            this.isResizing = true;
+            this.resizer.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            this.leftPanel.style.pointerEvents = 'none';
+        }
+
+        handleResizing(e) {
+            if (!this.isResizing) return;
+            const container = this.leftPanel.parentElement;
+            const containerRect = container.getBoundingClientRect();
+            let newLeftWidth = e.clientX - containerRect.left;
+            
+            const minWidth = 350;
+            if (newLeftWidth < minWidth) newLeftWidth = minWidth;
+            if (newLeftWidth > containerRect.width - minWidth) newLeftWidth = containerRect.width - minWidth;
+            
+            const newLeftPercent = (newLeftWidth / containerRect.width) * 100;
+            this.leftPanel.style.width = `${newLeftPercent}%`;
+            this.rightPanel.style.width = `${100 - newLeftPercent}%`;
+        }
+
+        stopResizing() {
+            if (this.isResizing) {
+                this.isResizing = false;
+                this.resizer.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                this.leftPanel.style.pointerEvents = 'auto';
+            }
+        }
+
+        // --- OCR Görselleştirme ---
+        toggleViewMode(mode) {
+            if (mode === 'pdf') {
+                this.pdfContainer.classList.remove('d-none');
+                this.ocrContainer.classList.add('d-none');
+            } else {
+                this.pdfContainer.classList.add('d-none');
+                this.ocrContainer.classList.remove('d-none');
+                this.loadImageAndHighlights();
+            }
+        }
+
+        zoomIn() {
+            if (this.zoomLevel < 3.0) {
+                this.zoomLevel += 0.25;
+                this.updateZoomDisplay();
+                this.drawHighlights();
+            }
+        }
+
+        zoomOut() {
+            if (this.zoomLevel > 0.5) {
+                this.zoomLevel -= 0.25;
+                this.updateZoomDisplay();
+                this.drawHighlights();
+            }
+        }
+
+        resetZoom() {
+            this.zoomLevel = 1.0;
+            this.rotation = 0;
+            const wrapper = document.getElementById('imageWrapper');
+            if (wrapper) wrapper.style.transform = `rotate(0deg)`;
+            this.updateZoomDisplay();
+            this.drawHighlights();
+        }
+
+        updateZoomDisplay() {
+            if (this.zoomLevelSpan) {
+                this.zoomLevelSpan.innerText = Math.round(this.zoomLevel * 100) + '%';
+            }
+        }
+
+        toggleSidebar() {
+            const sidebar = document.getElementById('thumbnailSidebar');
+            if (sidebar) {
+                if (sidebar.classList.contains('d-none')) {
+                    sidebar.classList.remove('d-none');
+                    sidebar.classList.add('d-flex');
+                } else {
+                    sidebar.classList.add('d-none');
+                    sidebar.classList.remove('d-flex');
+                }
+            }
+            
+            // Allow layout transition to finish before redrawing highlights
+            setTimeout(() => {
+                this.drawHighlights();
+            }, 150);
+        }
+
+        rotateImage() {
+            this.rotation = (this.rotation + 90) % 360;
+            const wrapper = document.getElementById('imageWrapper');
+            if (wrapper) {
+                wrapper.style.transition = 'transform 0.3s ease';
+                wrapper.style.transform = `rotate(${this.rotation}deg)`;
+                
+                // Kutu içindeki metinlerin dönüp dönmemesi bir tercih meselesi, 
+                // ancak bounding-box yapıları Wrapper içinde olduğu için image ile beraber pürüzsüzce döner!
+            }
+        }
+
+        downloadPdf() {
+            const link = document.createElement('a');
+            link.href = `/Document/StreamPdf/${this.pdfId}`;
+            link.download = `Document_${this.pdfId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        printDocument() {
+            // PDF yazdırma işlemi için gizli iframe kullanımı
+            let iframe = document.getElementById('printFrame');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'printFrame';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            iframe.src = `/Document/StreamPdf/${this.pdfId}`;
+            iframe.onload = () => {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+            };
+        }
+
+        changePage(delta) {
+            const newPage = this.currentPage + delta;
+            // Prevent going out of bounds
+            const totalPages = @(Model.PageCount > 0 ? Model.PageCount : 1);
+            if (newPage < 1 || newPage > totalPages) return;
+            
+            this.changePageTo(newPage);
+        }
+
+        changePageTo(page) {
+            this.currentPage = page;
+            if (this.currentPageSpan) this.currentPageSpan.innerText = this.currentPage;
+            this.updateThumbnailSelection();
+            this.loadImageAndHighlights();
+        }
+
+        updateThumbnailSelection() {
+            // Reset borders
+            const thumbs = document.querySelectorAll('.thumbnail-item img');
+            thumbs.forEach(t => {
+                t.style.borderColor = 'transparent';
+            });
+            // Highlight current
+            const currentThumb = document.getElementById(`thumb_${this.currentPage}`);
+            if (currentThumb) {
+                currentThumb.style.borderColor = '#8ab4f8'; // PDF.js mavi sınır rengi
+            }
+        }
+
+        loadImageAndHighlights() {
+            if (this.pageImage) {
+                this.pageImage.src = `/Document/CleanPageImage/${this.pdfId}?page=${this.currentPage}`;
+            }
+        }
+
+        drawHighlights() {
+            if (!this.pageImage || !this.highlightsLayer) return;
+            if (!this.pageImage.src || this.pageImage.src.endsWith('#') || this.pageImage.src === window.location.href) return;
+
+            const naturalW = this.pageImage.naturalWidth;
+            const naturalH = this.pageImage.naturalHeight;
+
+            if (naturalW === 0 || naturalH === 0) return;
+
+            // Container padding hesapla (artık ocrScrollArea üzerinden)
+            const ocrStyle = window.getComputedStyle(this.ocrScrollArea || this.ocrContainer);
+            const paddingX = parseFloat(ocrStyle.paddingLeft) + parseFloat(ocrStyle.paddingRight);
+            const paddingY = parseFloat(ocrStyle.paddingTop) + parseFloat(ocrStyle.paddingBottom);
+            
+            // Zoom = 1.0 iken (Fit) ekrana sığacak kullanılabilir alan
+            const availableW = (this.ocrScrollArea || this.ocrContainer).clientWidth - paddingX;
+            const availableH = (this.ocrScrollArea || this.ocrContainer).clientHeight - paddingY;
+
+            if (availableW <= 0 || availableH <= 0) return; // Görünür değilse çık
+
+            const imageRatio = naturalW / naturalH;
+            const containerRatio = availableW / availableH;
+            
+            let fitW, fitH;
+            if (containerRatio > imageRatio) {
+                fitH = availableH;
+                fitW = fitH * imageRatio;
+            } else {
+                fitW = availableW;
+                fitH = fitW / imageRatio;
+            }
+
+            // Seçili zoom seviyesine göre boyutu ayarla
+            const renderedW = fitW * this.zoomLevel;
+            const renderedH = fitH * this.zoomLevel;
+
+            this.pageImage.style.width = `${renderedW}px`;
+            this.pageImage.style.height = `${renderedH}px`;
+
+            const scaleX = renderedW / naturalW;
+            const scaleY = renderedH / naturalH;
+
+            this.highlightsLayer.innerHTML = ''; 
+
+            const pageFields = this.extractedFields.filter(f => f.PageNo === this.currentPage || (this.currentPage === 1 && f.PageNo === 0));
+
+            pageFields.forEach(f => {
+                const fw = f.Width || f.width;
+                const fh = f.Height || f.height;
+                const fx = f.X || f.x;
+                const fy = f.Y || f.y;
+
+                if (!fw || fw <= 0 || !fh || fh <= 0) return;
+
+                const box = document.createElement('div');
+                box.style.position = 'absolute';
+                // Kutuların içindeki metnin daha rahat okunabilmesi için hafif bir genişletme (padding) efekti veriyoruz.
+                const paddingXY = 4; // 4px dışa doğru genişlet
+                
+                // Artık object-fit: contain ofseti yok, doğrudan scale üzerinden sol/üst belirliyoruz.
+                box.style.left = `${(fx * scaleX) - paddingXY}px`;
+                box.style.top = `${(fy * scaleY) - paddingXY}px`;
+                box.style.width = `${(fw * scaleX) + (paddingXY * 2)}px`;
+                box.style.height = `${(fh * scaleY) + (paddingXY * 2)}px`;
+
+                let color = '#28a745'; // Default: Yeşil (Success)
+                const sev = f.Severity || f.severity;
+                if (sev === 'Danger') {
+                    color = '#dc3545'; // Kırmızı
+                } else if (sev === 'Warning') {
+                    color = '#ffc107'; // Sarı
+                }
+
+                box.style.border = `2px solid ${color}`;
+                box.style.backgroundColor = `${color}40`;
+                box.style.pointerEvents = 'auto';
+                box.style.cursor = 'pointer';
+                box.title = `${f.FieldName}: ${f.RawValue || 'Boş'}`;
+
+                // Eskiden sadece sağ paneli highlight ediyordu, şimdi inline editör açılacak
+                box.onclick = (e) => {
+                    e.stopPropagation(); // Parent'a tıklamayı engelle
+                    this.highlightInputField(f.Id); // Sağ paneli de highlight et (visual feedback)
+                    this.openInlineEditor(f, box);
+                };
+
+                this.highlightsLayer.appendChild(box);
+            });
+        }
+
+        // Window resize olduğunda kutuları yeniden boyutlandır (object-fit değişebilir)
+        handleResize = () => {
+            if (this.resizeTimeout) clearTimeout(this.resizeTimeout);
+            this.resizeTimeout = setTimeout(() => {
+                this.drawHighlights();
+            }, 100);
+        }
+
+        highlightInputField(fieldId) {
+            const inputs = document.querySelectorAll(`input[name="fieldId"][value="${fieldId}"]`);
+            if (inputs.length > 0) {
+                const form = inputs[0].closest('form');
+                const textInput = form.querySelector('input[name="correctedValue"]');
+                if (textInput) {
+                    textInput.focus();
+                    
+                    form.style.transition = "background-color 0.5s ease";
+                    form.style.backgroundColor = "#e7f1ff";
+                    setTimeout(() => { form.style.backgroundColor = ""; }, 1500);
+
+                    const tabBtn = document.getElementById('fields-tab');
+                    if (tabBtn && !tabBtn.classList.contains('active')) {
+                        const tab = new bootstrap.Tab(tabBtn);
+                        tab.show();
+                    }
+                }
+            }
+        }
+
+        // --- Yüzen (Floating) Inline Editör ---
+        createInlineEditorElement() {
+            this.inlineEditorPanel = document.createElement('div');
+            this.inlineEditorPanel.className = 'inline-editor-card';
+            
+            // XSS önlemi için içeriği dinamik oluşturuyoruz veya textContent atayacağız
+            this.inlineEditorPanel.innerHTML = `
+                <div class="inline-editor-header">
+                    <span id="inlineEditorTitle">Alan Adı</span>
+                    <button type="button" class="btn-close btn-sm" aria-label="Close" style="font-size: 0.6rem;"></button>
+                </div>
+                <div class="inline-editor-body">
+                    <textarea id="inlineEditorInput" rows="2"></textarea>
+                </div>
+                <div class="inline-editor-actions">
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold" id="inlineEditorCancelBtn">
+                        <i class="bi bi-x"></i> İptal
+                    </button>
+                    <button type="button" class="btn btn-sm btn-success rounded-pill fw-bold" id="inlineEditorSaveBtn">
+                        <i class="bi bi-check2"></i> Kaydet
+                    </button>
+                </div>
+            `;
+
+            // Olay dinleyicileri (Event Listeners)
+            const closeBtn = this.inlineEditorPanel.querySelector('.btn-close');
+            const cancelBtn = this.inlineEditorPanel.querySelector('#inlineEditorCancelBtn');
+            const saveBtn = this.inlineEditorPanel.querySelector('#inlineEditorSaveBtn');
+            
+            closeBtn.onclick = () => this.closeInlineEditor();
+            cancelBtn.onclick = () => this.closeInlineEditor();
+            saveBtn.onclick = () => this.saveInlineData();
+
+            // Editör dışına tıklandığında (veya ESC) kapanması için
+            document.addEventListener('mousedown', (e) => {
+                if (this.inlineEditorPanel.classList.contains('show') && 
+                    !this.inlineEditorPanel.contains(e.target) &&
+                    !e.target.closest('#highlightsLayer > div')) { // Herhangi bir highlight kutusuna tıklanmadıysa
+                    this.closeInlineEditor();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this.inlineEditorPanel.classList.contains('show')) {
+                    this.closeInlineEditor();
+                }
+            });
+
+            // Görüntüleyici panelin (ocrContainer veya parent'ı) içine ekle
+            const wrapper = document.getElementById('imageWrapper');
+            if (wrapper) {
+                wrapper.appendChild(this.inlineEditorPanel);
+            }
+        }
+
+        openInlineEditor(field, boxElement) {
+            this.currentEditingFieldId = field.Id || field.id;
+            
+            const titleEl = this.inlineEditorPanel.querySelector('#inlineEditorTitle');
+            const inputEl = this.inlineEditorPanel.querySelector('#inlineEditorInput');
+            
+            // XSS Önlemi: innerHTML yerine textContent / value setter kullanımı
+            titleEl.textContent = field.FieldName;
+            inputEl.value = field.RawValue || ''; 
+
+            // Pozisyon hesaplama
+            const boxRect = boxElement.getBoundingClientRect();
+            const wrapperRect = document.getElementById('imageWrapper').getBoundingClientRect();
+            
+            let topPos = (boxRect.top - wrapperRect.top) + boxRect.height + 8; // Kutunun hemen altına
+            let leftPos = boxRect.left - wrapperRect.left;
+
+            // Panel sağdan taşarsa sola daya
+            if (leftPos + 280 > wrapperRect.width) {
+                leftPos = wrapperRect.width - 280;
+            }
+            // Panel alttan taşarsa kutunun üstüne koy
+            if (topPos + 140 > wrapperRect.height) { // Yaklaşık panel yüksekliği 140px
+                topPos = (boxRect.top - wrapperRect.top) - 148;
+            }
+            if (leftPos < 0) leftPos = 0;
+            if (topPos < 0) topPos = 0;
+            this.inlineEditorPanel.style.top = `${topPos}px`;
+            this.inlineEditorPanel.style.left = `${leftPos}px`;
+            
+            this.inlineEditorPanel.classList.add('show');
+            inputEl.focus();
+        }
+
+        closeInlineEditor() {
+            this.inlineEditorPanel.classList.remove('show');
+            this.currentEditingFieldId = null;
+        }
+
+        async saveInlineData() {
+            if (!this.currentEditingFieldId) return;
+            
+            const inputEl = this.inlineEditorPanel.querySelector('#inlineEditorInput');
+            const newValue = inputEl.value;
+            const saveBtn = this.inlineEditorPanel.querySelector('#inlineEditorSaveBtn');
+            const originalBtnHtml = saveBtn.innerHTML;
+
+            // Arka plandaki AJAX formu bul ve kullan (UpdateField ucuna istek için)
+            const form = document.querySelector(`input[name="fieldId"][value="${this.currentEditingFieldId}"]`).closest('form');
+            if (!form) return;
+
+            // Formun textarea'sını da güncelle ki backend'e yeni veri gitsin
+            const formTextArea = form.querySelector('textarea[name="correctedValue"]');
+            if (formTextArea) {
+                formTextArea.value = newValue;
+            }
+
+            try {
+                saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+                saveBtn.disabled = true;
+
+                const formData = new FormData(form);
+                const actionUrl = form.getAttribute('action');
+
+                const response = await fetch(actionUrl, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                if (!response.ok) throw new Error('Network response was not ok');
+                const result = await response.json();
+
+                if (result.success) {
+                    this.showToast('Başarılı', result.message, 'success');
+                    
+                    // Sağ paneldeki formu görsel olarak güncelle
+                    if (formTextArea) {
+                        formTextArea.classList.remove('border-warning', 'border-danger', 'border-2');
+                        formTextArea.classList.add('border-success');
+                        const label = form.querySelector('label');
+                        if (!label.innerHTML.includes('Düzeltildi')) {
+                            label.innerHTML += ' <span class="badge bg-info"><i class="bi bi-pencil"></i> Düzeltildi</span>';
+                        }
+                        const alerts = form.querySelectorAll('small.text-danger, small.text-warning');
+                        alerts.forEach(a => a.remove());
+                    }
+
+                    // Kutu rengini ve verisini güncelle (drawHighlights yeniden renderlar)
+                    const field = this.extractedFields.find(f => (f.Id || f.id) === this.currentEditingFieldId);
+                    if (field) {
+                        field.Status = 'Corrected';
+                        field.Severity = 'Success';
+                        field.RawValue = newValue;
+                        this.drawHighlights(); 
+                    }
+                    this.closeInlineEditor();
+                } else {
+                    this.showToast('Hata', result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Inline AJAX Error:', error);
+                this.showToast('Hata', 'Sunucu ile iletişim kurulamadı.', 'danger');
+            } finally {
+                saveBtn.innerHTML = originalBtnHtml;
+                saveBtn.disabled = false;
+            }
+        }
+
+        // --- Textarea Otomatik Boyutlandırma ---
+        initAutoResize() {
+            const textareas = document.querySelectorAll('.auto-resize-textarea');
+            textareas.forEach(ta => {
+                this.autoResizeTextarea(ta);
+                if (!ta.dataset.resizeListenerAttached) {
+                    ta.addEventListener('input', (e) => this.autoResizeTextarea(e.target));
+                    ta.dataset.resizeListenerAttached = "true";
+                }
+            });
+        }
+
+        autoResizeTextarea(textarea) {
+            if (textarea.offsetParent !== null) {
+                textarea.style.height = 'auto'; 
+                textarea.style.height = `${textarea.scrollHeight + 2}px`; 
+            }
+        }
+    }
+
+    // Genel Metotlar (HTML içinden onclick ile çağrıldığı için window objesinde bırakıldı)
+    let appInstance = null;
+
+    function toggleViewMode(mode) {
+        if (appInstance) appInstance.toggleViewMode(mode);
+    }
+
+    function changePage(delta) {
+        if (appInstance) appInstance.changePage(delta);
+    }
+
+    function changePageTo(page) {
+        if (appInstance) appInstance.changePageTo(page);
+    }
+
+    function drawHighlights() {
+        if (appInstance) appInstance.drawHighlights();
+    }
+
+    function zoomIn() {
+        if (appInstance) appInstance.zoomIn();
+    }
+
+    function zoomOut() {
+        if (appInstance) appInstance.zoomOut();
+    }
+
+    function resetZoom() {
+        if (appInstance) appInstance.resetZoom();
+    }
+
+    function toggleSidebar() {
+        if (appInstance) appInstance.toggleSidebar();
+    }
+
+    function rotateImage() {
+        if (appInstance) appInstance.rotateImage();
+    }
+
+    function downloadPdf() {
+        if (appInstance) appInstance.downloadPdf();
+    }
+
+    function printDocument() {
+        if (appInstance) appInstance.printDocument();
+    }
+
+    function loadAuditLogs(pdfId) {
+        var container = document.getElementById('auditLogContainer');
+        container.innerHTML = '<div class="spinner-border text-primary spinner-border-sm" role="status"></div>';
+        
+        fetch(`/Document/AuditLogs/${pdfId}`)
+            .then(response => response.text())
+            .then(html => {
+                container.innerHTML = html;
+            })
+            .catch(err => {
+                container.innerHTML = '<p class="text-danger small">Loglar yüklenirken hata oluştu.</p>';
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // App başlatılıyor
+        const pdfId = @Model.Id;
+        const initialPage = @(ViewBag.CurrentPage ?? 1);
+        appInstance = new DocumentViewerApp(pdfId, initialPage);
+
+        // Şablon yükleme mantığı
+        const institutionSelect = document.getElementById('institutionSelect');
+        const templateSelect = document.getElementById('templateSelect');
+        
+        if (institutionSelect && templateSelect) {
+            institutionSelect.addEventListener('change', function() {
+                const instId = this.value;
+                templateSelect.innerHTML = '<option value="">Şablon Seçiniz...</option>';
+                
+                if (instId) {
+                    templateSelect.disabled = true;
+                    templateSelect.innerHTML = '<option value="">Yükleniyor...</option>';
+                    
+                    fetch(`/Document/GetTemplates?institutionId=${instId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            templateSelect.innerHTML = '<option value="">Şablon Seçiniz...</option>';
+                            data.forEach(item => {
+                                const option = document.createElement('option');
+                                option.value = item.id;
+                                option.textContent = item.name;
+                                templateSelect.appendChild(option);
+                            });
+                            templateSelect.disabled = false;
+                        })
+                        .catch(error => {
+                            templateSelect.innerHTML = '<option value="">(Hata oluştu)</option>';
+                        });
+                } else {
+                    templateSelect.innerHTML = '<option value="">(Önce Kurum Seçin)</option>';
+                    templateSelect.disabled = true;
+                }
+            });
+        }
+    });
+</script>

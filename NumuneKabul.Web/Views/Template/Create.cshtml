@@ -1,0 +1,551 @@
+@model NumuneKabul.Web.Models.FormTemplateFormViewModel
+@{
+    ViewData["Title"] = "Yeni Şablon Ekle";
+}
+
+<style>
+    .template-editor-card {
+        border: 1px dashed #dee2e6;
+        border-radius: 0.5rem;
+        background: #ffffff;
+    }
+    .canvas-container { 
+        position: relative; 
+        background: #e5e7eb; 
+        overflow: auto; 
+        height: 600px; 
+        text-align: left; 
+    }
+    #imageCanvas { 
+        cursor: crosshair; 
+        transform-origin: top left;
+        max-width: none !important;
+    }
+    .field-row input, .field-row select {
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        box-shadow: none;
+    }
+    .field-row input:focus, .field-row select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    .btn-remove-field {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .splitter {
+        width: 8px;
+        background-color: transparent;
+        cursor: col-resize;
+        transition: background-color 0.2s;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .splitter::after {
+        content: "⋮";
+        color: #adb5bd;
+        font-size: 1.2rem;
+    }
+    .splitter:hover, .splitter.resizing {
+        background-color: #0d6efd;
+    }
+</style>
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold fs-5 text-dark mb-0 d-flex align-items-center">
+            <i class="bi bi-file-earmark-plus me-2 fs-4"></i>
+            Yeni Şablon Ekle
+        </h4>
+        <a asp-action="Index" class="btn btn-sm btn-outline-secondary rounded-pill px-3 fw-medium">
+            <i class="bi bi-arrow-left me-1"></i> Listeye Dön
+        </a>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="alert alert-info rounded-pill py-2 px-4 mb-3 d-flex align-items-center shadow-sm" style="background-color: #e8f4fd; border-color: #d1e7fc; color: #084298;">
+        <i class="bi bi-info-circle me-2"></i> 
+        <span class="small fw-medium">Koordinat seçmek için önce formun örnek bir fotoğrafını yükleyin. Aşağıdaki listeden "Çiz" butonuna basıp resim üzerinde alanı seçin.</span>
+    </div>
+
+    <form asp-action="Create" method="post" id="templateForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="BaseImageWidth" id="BaseImageWidth" />
+        <input type="hidden" asp-for="BaseImageHeight" id="BaseImageHeight" />
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+        <!-- Main Card like layout -->
+        <div class="card shadow-sm border-0 template-editor-card p-3 mb-4">
+            
+            <!-- Card Header Area -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold m-0 fs-6 text-dark">Zonal OCR Koordinat Belirleyici</h5>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="btn-group btn-group-sm bg-white rounded-pill border shadow-sm" role="group">
+                        <button type="button" class="btn btn-link text-dark text-decoration-none px-2" id="btnZoomOut" title="Uzaklaştır"><i class="bi bi-search"></i> -</button>
+                        <span class="btn btn-link text-dark text-decoration-none disabled px-3 fw-bold border-start border-end" id="btnZoomReset">100%</span>
+                        <button type="button" class="btn btn-link text-dark text-decoration-none px-2" id="btnZoomIn" title="Yakınlaştır"><i class="bi bi-search"></i> +</button>
+                    </div>
+                    <div class="d-flex align-items-center bg-white border rounded ps-2 overflow-hidden shadow-sm">
+                        <span class="small text-muted fw-medium me-2">Dosya Seç</span>
+                        <input type="file" id="imageLoader" accept="image/*" class="form-control form-control-sm border-0 bg-transparent text-muted" style="max-width: 200px;" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Area: Left (Image) and Right (Fields & Info) -->
+            <div class="d-flex flex-column flex-lg-row">
+                
+                <!-- Left: Canvas Area -->
+                <div id="mainLeftPanel" class="d-flex flex-column mb-3 mb-lg-0" style="width: 45%;">
+                    <div class="border rounded-3 d-flex flex-column shadow-sm" style="height: 600px; background-color: #333333; overflow: hidden;">
+                        <!-- Toolbar for image viewer -->
+                        <div class="bg-dark text-light d-flex justify-content-between align-items-center px-3 py-2 border-bottom border-secondary" style="font-size: 0.85rem;">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-list me-3 fs-5"></i> 
+                                <span id="imgWidthDisp" class="fw-bold">0</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-3 fw-medium">
+                                <span>1 / 1</span>
+                                <span class="text-secondary">|</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="cursor-pointer" id="btnZoomOutTool" style="cursor: pointer;"><i class="bi bi-dash"></i></span>
+                                    <span id="zoomPercentDisp">100%</span>
+                                    <span class="cursor-pointer" id="btnZoomInTool" style="cursor: pointer;"><i class="bi bi-plus"></i></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="canvas-container flex-grow-1" id="canvasWrapper">
+                            <canvas id="imageCanvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Splitter -->
+                <div class="splitter d-none d-lg-flex mx-1" id="mainDragMe" title="Panelleri Boyutlandır"></div>
+
+                <!-- Right: Fields & Template Info -->
+                <div id="mainRightPanel" class="d-flex flex-column flex-xl-row gap-2" style="width: 55%;">
+                    
+                    <!-- Fields List -->
+                    <div class="flex-grow-1 border rounded-3 p-3 bg-white d-flex flex-column shadow-sm" id="fieldsListContainer" style="min-width: 0;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold m-0 fs-6 text-dark">Çıkarılacak Alanlar (Kurallar)</h6>
+                            <button type="button" class="btn btn-sm btn-success rounded-pill px-3 fw-bold shadow-sm" id="btn-add-field" style="font-size: 0.75rem;">
+                                <i class="bi bi-plus me-1"></i> Alan Ekle
+                            </button>
+                        </div>
+                        
+                        <div class="table-responsive flex-grow-1" style="overflow-y: auto; max-height: 520px;">
+                            <table class="table table-borderless align-middle mb-0" id="fields-table" style="font-size: 0.85rem;">
+                                <thead style="position: sticky; top: 0; background: white; z-index: 1;">
+                                    <tr class="text-muted border-bottom text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                                        <th class="fw-bold pb-2">Alan Adı</th>
+                                        <th class="fw-bold pb-2">Veri Tipi</th>
+                                        <th class="fw-bold pb-2">Regex Kuralı</th>
+                                        <th class="fw-bold pb-2 text-center">Koordinat</th>
+                                        <th style="width: 40px;" class="pb-2"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="no-fields-message" class="text-center py-5 text-muted">
+                            <i class="bi bi-ui-checks-grid fs-1 text-light mb-2 d-block"></i>
+                            <span class="small">Şu an hiçbir alan tanımlı değil.<br>Yukarıdaki "Alan Ekle" butonunu kullanın.</span>
+                        </div>
+                    </div>
+
+                    <!-- Splitter -->
+                    <div class="splitter d-none d-xl-flex" id="dragMe"></div>
+
+                    <!-- Template Info Sidebar -->
+                    <div class="border rounded-3 p-3 bg-white shadow-sm" id="sidebarContainer" style="width: 280px; flex-shrink: 0; height: fit-content;">
+                        <h6 class="fw-bold mb-3 border-bottom pb-2 fs-6 text-dark">Şablon Bilgileri</h6>
+                        
+                        <div class="mb-3">
+                            <label asp-for="InstitutionId" class="form-label small text-muted mb-1 fw-bold">Kurum</label>
+                            <select asp-for="InstitutionId" class="form-select form-select-sm" asp-items="@(new SelectList(Model.Institutions, "Id", "Name"))">
+                                <option value="">-- Seçiniz --</option>
+                            </select>
+                            <span asp-validation-for="InstitutionId" class="text-danger small" style="font-size: 0.75rem;"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Name" class="form-label small text-muted mb-1 fw-bold">Şablon Adı</label>
+                            <input asp-for="Name" class="form-control form-control-sm" placeholder="Şablon adı girin" />
+                            <span asp-validation-for="Name" class="text-danger small" style="font-size: 0.75rem;"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Description" class="form-label small text-muted mb-1 fw-bold">Açıklama</label>
+                            <textarea asp-for="Description" class="form-control form-control-sm" rows="3" placeholder="Şablon hakkında kısa açıklama..."></textarea>
+                            <span asp-validation-for="Description" class="text-danger small" style="font-size: 0.75rem;"></span>
+                        </div>
+
+                        <div class="mb-4 form-check form-switch d-flex align-items-center ps-0">
+                            <label class="form-check-label fw-bold small text-primary me-auto" for="isActiveSwitch">Aktif</label>
+                            <input asp-for="IsActive" class="form-check-input ms-0 mt-0" type="checkbox" id="isActiveSwitch" checked style="cursor: pointer;">
+                        </div>
+                        
+                        <div class="mt-2">
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm rounded-pill" style="font-size: 0.9rem;">
+                                <i class="bi bi-save me-2"></i>Kaydet
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        $(document).ready(function () {
+            let fieldIndex = 0;
+            let currentDrawingIndex = -1;
+
+            function addFieldRow() {
+                const tbody = $('#fields-table tbody');
+                $('#no-fields-message').hide();
+                
+                const tr = `
+                    <tr id="field-row-${fieldIndex}" class="field-row border-bottom">
+                        <td class="py-3">
+                            <input type="hidden" name="TemplateFields[${fieldIndex}].Id" value="0" />
+                            <input type="hidden" name="TemplateFields[${fieldIndex}].OrderNo" value="0" />
+                            <input type="text" name="TemplateFields[${fieldIndex}].FieldName" class="form-control form-control-sm px-2 py-1" placeholder="Örn: TC" required />
+                        </td>
+                        <td class="py-3">
+                            <select name="TemplateFields[${fieldIndex}].DataType" class="form-select form-select-sm px-2 py-1 text-muted">
+                                <option value="string">Metin (String)</option>
+                                <option value="int">Tam Sayı (Int)</option>
+                                <option value="decimal">Ondalık (Decimal)</option>
+                                <option value="date">Tarih (Date)</option>
+                            </select>
+                        </td>
+                        <td class="py-3">
+                            <input type="text" name="TemplateFields[${fieldIndex}].Regex" class="form-control form-control-sm px-2 py-1 text-muted" placeholder="Regex..." style="font-family: monospace; font-size: 0.8rem;" />
+                        </td>
+                        <td class="py-3 text-center">
+                            <!-- Zonal OCR Hidden Inputs -->
+                            <input type="hidden" name="TemplateFields[${fieldIndex}].X" id="x_${fieldIndex}" />
+                            <input type="hidden" name="TemplateFields[${fieldIndex}].Y" id="y_${fieldIndex}" />
+                            <input type="hidden" name="TemplateFields[${fieldIndex}].Width" id="w_${fieldIndex}" />
+                            <input type="hidden" name="TemplateFields[${fieldIndex}].Height" id="h_${fieldIndex}" />
+                            <input type="hidden" name="TemplateFields[${fieldIndex}].Psm" value="7" />
+                            
+                            <div class="d-flex flex-column align-items-center">
+                                <button type="button" class="btn btn-sm btn-outline-info btn-draw px-2 py-0 fw-medium d-flex align-items-center" data-index="${fieldIndex}" style="font-size: 0.75rem;">
+                                    <i class="bi bi-bounding-box me-1"></i> Çiz
+                                </button>
+                                <div class="text-success fw-bold mt-1 d-flex align-items-center" id="coord-lbl-${fieldIndex}" style="font-size:0.7rem; display:none !important;">
+                                    Seçildi <i class="bi bi-check-circle-fill ms-1"></i>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 text-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-field rounded-circle ms-auto" data-index="${fieldIndex}">
+                                <i class="bi bi-x fs-6"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                
+                tbody.append(tr);
+                fieldIndex++;
+                
+                // Scroll to bottom of table
+                const tableContainer = $('#fields-table').parent();
+                tableContainer.scrollTop(tableContainer[0].scrollHeight);
+            }
+
+            addFieldRow();
+
+            $('#btn-add-field').click(function () {
+                addFieldRow();
+            });
+
+            $(document).on('click', '.btn-remove-field', function () {
+                const index = $(this).data('index');
+                $(`#field-row-${index}`).remove();
+                if(currentDrawingIndex == index) currentDrawingIndex = -1;
+                
+                if ($('#fields-table tbody tr').length === 0) {
+                    $('#no-fields-message').show();
+                }
+            });
+
+            $(document).on('click', '.btn-draw', function() {
+                $('.field-row').removeClass('bg-light');
+                const index = $(this).data('index');
+                currentDrawingIndex = index;
+                $(`#field-row-${index}`).addClass('bg-light');
+                
+                // Scroll to canvas
+                $('html, body').animate({
+                    scrollTop: $("#canvasWrapper").offset().top - 150
+                }, 400);
+            });
+            
+            // --- CANVAS DRAWING LOGIC ---
+            const canvas = document.getElementById('imageCanvas');
+            const ctx = canvas.getContext('2d');
+            const imageLoader = document.getElementById('imageLoader');
+            
+            let img = new Image();
+            let isDrawing = false;
+            let startX, startY, currentX, currentY;
+
+            // Zoom logic
+            let scale = 1.0;
+            const scaleStep = 0.1;
+            const minScale = 0.1;
+            const maxScale = 4.0;
+
+            function updateZoomDisplay() {
+                const percent = Math.round(scale * 100);
+                $('#btnZoomReset').text(`${percent}%`);
+                $('#zoomPercentDisp').text(`${percent}%`);
+            }
+
+            function updateZoom() {
+                canvas.style.transform = `scale(${scale})`;
+                updateZoomDisplay();
+            }
+
+            function zoomIn() {
+                if(scale < maxScale) {
+                    scale += scaleStep;
+                    updateZoom();
+                }
+            }
+
+            function zoomOut() {
+                if(scale > minScale) {
+                    scale -= scaleStep;
+                    updateZoom();
+                }
+            }
+
+            $('#btnZoomIn, #btnZoomInTool').click(zoomIn);
+            $('#btnZoomOut, #btnZoomOutTool').click(zoomOut);
+
+            $('#btnZoomReset').click(function() {
+                scale = 1.0;
+                updateZoom();
+            });
+
+            $('#canvasWrapper').on('wheel', function(e) {
+                if(e.originalEvent.ctrlKey) {
+                    e.preventDefault();
+                    if(e.originalEvent.deltaY > 0) {
+                        zoomOut();
+                    } else {
+                        zoomIn();
+                    }
+                }
+            });
+
+            imageLoader.addEventListener('change', handleImage, false);
+
+            function handleImage(e) {
+                if(!e.target.files || !e.target.files[0]) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    img.onload = function() {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+
+                        $('#BaseImageWidth').val(img.width);
+                        $('#BaseImageHeight').val(img.height);
+                        
+                        $('#imgWidthDisp').text(img.width);
+
+                        const wrapperWidth = $('#canvasWrapper').width();
+                        if(img.width > wrapperWidth && wrapperWidth > 0) {
+                            scale = (wrapperWidth / img.width) * 0.95;
+                            if(scale < minScale) scale = minScale;
+                        } else {
+                            scale = 1.0;
+                        }
+                        updateZoom();
+                    }
+                    img.src = event.target.result;
+                }
+                reader.readAsDataURL(e.target.files[0]);
+            }
+
+            canvas.addEventListener('mousedown', (e) => {
+                if(currentDrawingIndex === -1) {
+                    // Modern alert substitution
+                    const alertHtml = `<div class="alert alert-warning alert-dismissible fade show shadow-sm" role="alert" style="position:fixed; top:20px; right:20px; z-index:9999;">
+                                         <i class="bi bi-exclamation-triangle-fill me-2"></i> Lütfen önce aşağıdaki listeden çizim yapmak istediğiniz alan için <strong>"Çiz"</strong> butonuna basın.
+                                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                       </div>`;
+                    $('body').append(alertHtml);
+                    setTimeout(() => $('.alert-warning').alert('close'), 4000);
+                    return;
+                }
+                isDrawing = true;
+                const rect = canvas.getBoundingClientRect();
+                startX = (e.clientX - rect.left) / scale;
+                startY = (e.clientY - rect.top) / scale;
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!isDrawing) return;
+                const rect = canvas.getBoundingClientRect();
+                currentX = (e.clientX - rect.left) / scale;
+                currentY = (e.clientY - rect.top) / scale;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                
+                ctx.strokeStyle = '#20c997'; // success/teal color
+                ctx.lineWidth = 2 / scale;
+                ctx.strokeRect(startX, startY, currentX - startX, currentY - startY);
+                
+                ctx.fillStyle = 'rgba(32, 201, 151, 0.2)';
+                ctx.fillRect(startX, startY, currentX - startX, currentY - startY);
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                
+                if (startX === undefined || currentX === undefined) return;
+                
+                const x = Math.round(Math.min(startX, currentX));
+                const y = Math.round(Math.min(startY, currentY));
+                const w = Math.round(Math.abs(currentX - startX));
+                const h = Math.round(Math.abs(currentY - startY));
+                
+                if (w > 5 && h > 5) {
+                    $(`#x_${currentDrawingIndex}`).val(x);
+                    $(`#y_${currentDrawingIndex}`).val(y);
+                    $(`#w_${currentDrawingIndex}`).val(w);
+                    $(`#h_${currentDrawingIndex}`).val(h);
+                    
+                    const label = $(`#coord-lbl-${currentDrawingIndex}`);
+                    label.removeClass('d-none').css('display', 'flex', 'important');
+                    
+                    $('.field-row').removeClass('bg-light');
+                    currentDrawingIndex = -1;
+                }
+            });
+
+            });
+
+            // --- MAIN SPLITTER LOGIC (Canvas vs Fields Panel) ---
+            const mainSplitter = document.getElementById('mainDragMe');
+            const mainLeftPanel = document.getElementById('mainLeftPanel');
+            const mainRightPanel = document.getElementById('mainRightPanel');
+            
+            let mainStartX = 0;
+            let mainStartLeftWidth = 0;
+            
+            const mainMouseDownHandler = function (e) {
+                mainStartX = e.clientX;
+                const leftRect = mainLeftPanel.getBoundingClientRect();
+                mainStartLeftWidth = leftRect.width;
+                
+                document.addEventListener('mousemove', mainMouseMoveHandler);
+                document.addEventListener('mouseup', mainMouseUpHandler);
+                
+                mainSplitter.classList.add('resizing');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                mainLeftPanel.style.pointerEvents = 'none'; // Prevent canvas from capturing events
+            };
+            
+            const mainMouseMoveHandler = function (e) {
+                const dx = e.clientX - mainStartX;
+                const containerWidth = mainLeftPanel.parentElement.getBoundingClientRect().width;
+                let newLeftWidth = mainStartLeftWidth + dx;
+                
+                // Constraints
+                const minWidth = 300;
+                if (newLeftWidth < minWidth) newLeftWidth = minWidth;
+                if (newLeftWidth > containerWidth - minWidth) newLeftWidth = containerWidth - minWidth;
+                
+                const leftPercent = (newLeftWidth / containerWidth) * 100;
+                mainLeftPanel.style.width = `${leftPercent}%`;
+                mainRightPanel.style.width = `${100 - leftPercent}%`;
+            };
+            
+            const mainMouseUpHandler = function () {
+                mainSplitter.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                mainLeftPanel.style.pointerEvents = '';
+                
+                document.removeEventListener('mousemove', mainMouseMoveHandler);
+                document.removeEventListener('mouseup', mainMouseUpHandler);
+                
+                // Redraw canvas if needed
+                drawHighlights();
+            };
+            
+            if (mainSplitter) {
+                mainSplitter.addEventListener('mousedown', mainMouseDownHandler);
+            }
+
+            // --- SIDEBAR SPLITTER LOGIC (Fields Panel vs Sidebar) ---
+            const splitter = document.getElementById('dragMe');
+            const rightSide = document.getElementById('sidebarContainer');
+            
+            let x = 0;
+            let rightWidth = 0;
+
+            const mouseDownHandler = function (e) {
+                x = e.clientX;
+                const rightRect = rightSide.getBoundingClientRect();
+                rightWidth = rightRect.width;
+
+                document.addEventListener('mousemove', mouseMoveHandler);
+                document.addEventListener('mouseup', mouseUpHandler);
+                
+                splitter.classList.add('resizing');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+            };
+
+            const mouseMoveHandler = function (e) {
+                const dx = e.clientX - x;
+                const newRightWidth = rightWidth - dx; // As we drag left (dx < 0), right side increases
+                
+                if(newRightWidth > 200 && newRightWidth < 800) {
+                    rightSide.style.width = `${newRightWidth}px`;
+                }
+            };
+
+            const mouseUpHandler = function () {
+                splitter.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                document.removeEventListener('mouseup', mouseUpHandler);
+            };
+
+            if(splitter) {
+                splitter.addEventListener('mousedown', mouseDownHandler);
+            }
+        });
+    </script>
+}

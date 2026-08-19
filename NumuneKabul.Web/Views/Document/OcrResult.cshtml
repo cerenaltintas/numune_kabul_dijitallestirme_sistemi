@@ -1,0 +1,103 @@
+@model NumuneKabul.Web.Models.OcrResultViewModel
+
+@{
+    ViewData["Title"] = "OCR Sonucu";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>OCR Sonucu Görüntüleme</h2>
+        <a asp-action="Index" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Belgelere Dön
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <strong><i class="bi bi-file-text"></i> PDF ID: @Model.PdfId OCR Çıktısı</strong>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Aşağıdaki metin, optik karakter tanıma (OCR) motoru tarafından PDF sayfalarından okunarak kaydedilmiş olan ham metindir.</p>
+                    <pre class="bg-light p-4 border rounded" style="white-space: pre-wrap; font-size: 15px; font-family: 'Courier New', Courier, monospace;">@Model.KaydedilenYazi</pre>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <strong><i class="bi bi-magic"></i> Veri Çıkar (Şablon Uygula)</strong>
+                </div>
+                <div class="card-body">
+                    <form asp-action="ApplyTemplate" method="post">
+                        <input type="hidden" name="pdfId" value="@Model.PdfId" />
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Kurum Seçimi</label>
+                            <select id="institutionSelect" name="institutionId" class="form-select" required>
+                                <option value="">Kurum Seçiniz...</option>
+                                @if (ViewBag.Institutions != null)
+                                {
+                                    foreach (var inst in ViewBag.Institutions)
+                                    {
+                                        <option value="@inst.Id">@inst.Name</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Şablon Seçimi</label>
+                            <select id="templateSelect" name="templateId" class="form-select" required disabled>
+                                <option value="">Önce Kurum Seçin...</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 fw-bold">
+                            <i class="bi bi-play-circle"></i> Şablonu Uygula
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const institutionSelect = document.getElementById('institutionSelect');
+        const templateSelect = document.getElementById('templateSelect');
+
+        function loadTemplates() {
+            const instId = institutionSelect.value;
+            templateSelect.innerHTML = '<option value="">Şablon Seçiniz...</option>';
+            
+            if (instId) {
+                templateSelect.disabled = true;
+                templateSelect.innerHTML = '<option value="">Yükleniyor...</option>';
+                
+                fetch(`/Document/GetTemplates?institutionId=${instId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        templateSelect.innerHTML = '<option value="">Şablon Seçiniz...</option>';
+                        data.forEach(item => {
+                            const option = document.createElement('option');
+                            option.value = item.id;
+                            option.textContent = item.name;
+                            templateSelect.appendChild(option);
+                        });
+                        templateSelect.disabled = false;
+                    })
+                    .catch(error => {
+                        templateSelect.innerHTML = '<option value="">(Hata oluştu)</option>';
+                    });
+            } else {
+                templateSelect.innerHTML = '<option value="">(Önce Kurum Seçin)</option>';
+                templateSelect.disabled = true;
+            }
+        }
+
+        institutionSelect.addEventListener('change', loadTemplates);
+    </script>
+}

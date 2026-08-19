@@ -1,0 +1,98 @@
+@model NumuneKabul.Application.DTOs.UpdateUserDto
+@{
+    ViewData["Title"] = "Kullanýcý Düzenle";
+}
+
+<div class="page-header mb-4">
+    <div>
+        <h2 class="h3 mb-1 text-dark" style="font-weight: 700;">Kullanýcý Düzenle</h2>
+        <p class="text-muted mb-0">Personel bilgilerini ve yetkilerini güncelleyin.</p>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-2"></i> Geri Dön
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4" style="max-width: 800px;">
+    <div class="card-body p-4">
+        <form asp-action="Edit" method="post">
+            <input type="hidden" asp-for="Id" />
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+            
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <label asp-for="Name" class="form-label fw-medium text-dark">Ad Soyad <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                        <input asp-for="Name" class="form-control border-start-0 ps-0" />
+                    </div>
+                    <span asp-validation-for="Name" class="text-danger small mt-1 d-block"></span>
+                </div>
+                
+                <div class="col-md-6">
+                    <label asp-for="Username" class="form-label fw-medium text-dark">Kullanýcý Adý <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-at text-muted"></i></span>
+                        <input asp-for="Username" class="form-control border-start-0 ps-0" />
+                    </div>
+                    <span asp-validation-for="Username" class="text-danger small mt-1 d-block"></span>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <label asp-for="Password" class="form-label fw-medium text-dark">Þifre (Deðiþtirmek istemiyorsanýz boþ býrakýn)</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-key text-muted"></i></span>
+                        <input asp-for="Password" type="password" class="form-control border-start-0 ps-0" placeholder="••••••••" />
+                    </div>
+                    <span asp-validation-for="Password" class="text-danger small mt-1 d-block"></span>
+                </div>
+                
+                <div class="col-md-6">
+                    <label asp-for="Role" class="form-label fw-medium text-dark">Rol <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-shield-lock text-muted"></i></span>
+                        <select asp-for="Role" class="form-select border-start-0 ps-0">
+                            <option value="">-- Rol Seçiniz --</option>
+                            <option value="Admin">Admin</option>
+                            <option value="Numune Kabul Personeli">Numune Kabul Personeli</option>
+                        </select>
+                    </div>
+                    <span asp-validation-for="Role" class="text-danger small mt-1 d-block"></span>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <label asp-for="InstitutionId" class="form-label fw-medium text-dark">Kurum (Opsiyonel)</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-building text-muted"></i></span>
+                        <select asp-for="InstitutionId" class="form-select border-start-0 ps-0" asp-items="ViewBag.Institutions">
+                            <option value="">-- Kurum Seçiniz --</option>
+                        </select>
+                    </div>
+                    <span asp-validation-for="InstitutionId" class="text-danger small mt-1 d-block"></span>
+                    <div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i> Admin kullanýcýlarý için kurum seçmek zorunlu deðildir.</div>
+                </div>
+                
+                <div class="col-md-6 d-flex align-items-center">
+                    <div class="form-check form-switch mt-md-4">
+                        <input class="form-check-input" type="checkbox" asp-for="IsActive" role="switch" style="width: 3em; height: 1.5em;" />
+                        <label class="form-check-label ms-3 mt-1 fw-medium text-dark" asp-for="IsActive">Kullanýcý Aktif mi?</label>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-4 border-light" />
+
+            <div class="d-flex justify-content-end gap-2">
+                <a asp-action="Index" class="btn btn-light px-4">Ýptal</a>
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="bi bi-check-lg me-1"></i> Güncelle
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
